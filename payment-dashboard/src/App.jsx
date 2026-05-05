@@ -39,6 +39,42 @@ const formatUsername = (value) => {
   return value.split('*')[0]
 }
 
+const NAV_STORAGE_KEY = 'stellar-nav-open'
+
+const useNavState = () => {
+  const [isNavOpen, setIsNavOpen] = useState(() => {
+    const stored = sessionStorage.getItem(NAV_STORAGE_KEY)
+    if (stored === 'true' || stored === 'false') {
+      return stored === 'true'
+    }
+
+    return window.matchMedia('(min-width: 769px)').matches
+  })
+
+  useEffect(() => {
+    const mediaQuery = window.matchMedia('(max-width: 768px)')
+    const syncNav = (event) => {
+      if (event.matches) {
+        setIsNavOpen(false)
+      }
+    }
+
+    if (mediaQuery.addEventListener) {
+      mediaQuery.addEventListener('change', syncNav)
+      return () => mediaQuery.removeEventListener('change', syncNav)
+    }
+
+    mediaQuery.addListener(syncNav)
+    return () => mediaQuery.removeListener(syncNav)
+  }, [])
+
+  useEffect(() => {
+    sessionStorage.setItem(NAV_STORAGE_KEY, String(isNavOpen))
+  }, [isNavOpen])
+
+  return [isNavOpen, setIsNavOpen]
+}
+
 function App() {
   const [activeView, setActiveView] = useState('dashboard')
   const [userPublicKey, setUserPublicKey] = useState('')
@@ -46,7 +82,28 @@ function App() {
 
   useEffect(() => {
     const syncView = () => {
-      setActiveView(window.location.hash === '#register' ? 'register' : 'dashboard')
+      const hash = window.location.hash
+      if (hash === '#register') {
+        setActiveView('register')
+        return
+      }
+
+      if (hash === '#help') {
+        setActiveView('help')
+        return
+      }
+
+      if (hash === '#analytics') {
+        setActiveView('analytics')
+        return
+      }
+
+      if (hash === '#history') {
+        setActiveView('history')
+        return
+      }
+
+      setActiveView('dashboard')
     }
 
     syncView()
@@ -56,7 +113,27 @@ function App() {
 
   const handleNavigate = (view) => {
     setActiveView(view)
-    window.location.hash = view === 'register' ? 'register' : ''
+    if (view === 'register') {
+      window.location.hash = 'register'
+      return
+    }
+
+    if (view === 'help') {
+      window.location.hash = 'help'
+      return
+    }
+
+    if (view === 'analytics') {
+      window.location.hash = 'analytics'
+      return
+    }
+
+    if (view === 'history') {
+      window.location.hash = 'history'
+      return
+    }
+
+    window.location.hash = ''
   }
 
   const handleRegistrationStateChange = (nextState) => {
@@ -82,11 +159,50 @@ function App() {
     )
   }
 
+  if (activeView === 'help') {
+    return (
+      <HelpPage
+        onDashboardClick={() => handleNavigate('dashboard')}
+        onAnalyticsClick={() => handleNavigate('analytics')}
+        onHistoryClick={() => handleNavigate('history')}
+        onRegisterClick={() => handleNavigate('register')}
+        canRegister={registrationState === 'new'}
+      />
+    )
+  }
+
+  if (activeView === 'analytics') {
+    return (
+      <AnalyticsPage
+        onDashboardClick={() => handleNavigate('dashboard')}
+        onHistoryClick={() => handleNavigate('history')}
+        onHelpClick={() => handleNavigate('help')}
+        onRegisterClick={() => handleNavigate('register')}
+        canRegister={registrationState === 'new'}
+      />
+    )
+  }
+
+  if (activeView === 'history') {
+    return (
+      <HistoryPage
+        onDashboardClick={() => handleNavigate('dashboard')}
+        onAnalyticsClick={() => handleNavigate('analytics')}
+        onHelpClick={() => handleNavigate('help')}
+        onRegisterClick={() => handleNavigate('register')}
+        canRegister={registrationState === 'new'}
+      />
+    )
+  }
+
   return (
     <Dashboard
       userPublicKey={userPublicKey}
       setUserPublicKey={setUserPublicKey}
       onRegisterClick={() => handleNavigate('register')}
+      onAnalyticsClick={() => handleNavigate('analytics')}
+      onHistoryClick={() => handleNavigate('history')}
+      onHelpClick={() => handleNavigate('help')}
       onRegistrationStateChange={handleRegistrationStateChange}
       canRegister={registrationState === 'new'}
     />
@@ -97,9 +213,22 @@ function Dashboard({
   userPublicKey,
   setUserPublicKey,
   onRegisterClick,
+  onAnalyticsClick,
+  onHistoryClick,
+  onHelpClick,
   onRegistrationStateChange,
   canRegister,
 }) {
+  const [isNavOpen, setIsNavOpen] = useNavState()
+  const closeNav = () => {
+    sessionStorage.setItem(NAV_STORAGE_KEY, 'false')
+    setIsNavOpen(false)
+  }
+  const handleNav = (action) => {
+    sessionStorage.setItem(NAV_STORAGE_KEY, 'false')
+    setIsNavOpen(false)
+    action()
+  }
   const [nameTag, setNameTag] = useState('')
   const [amount, setAmount] = useState('')
   const [isProcessing, setIsProcessing] = useState(false)
@@ -324,20 +453,25 @@ function Dashboard({
   }
 
   return (
-    <div className="dashboard">
-      <aside className="sidebar reveal">
+    <div className={`dashboard ${isNavOpen ? 'nav-open' : ''}`}>
+      <button
+        type="button"
+        className={`sidebar-scrim ${isNavOpen ? 'is-open' : ''}`}
+        onClick={() => setIsNavOpen(false)}
+        aria-label="Close navigation"
+      />
+      <aside className={`sidebar ${isNavOpen ? 'is-open' : ''}`}>
         <div className="brand">
           <div className="brand-mark">S</div>
           <h1>Stellar Pay</h1>
         </div>
         <div className="nav">
-          <button type="button">Overview</button>
-          <button type="button">Dashboard</button>
-          <button type="button">History</button>
-          <button type="button">Analytics</button>
-          <button type="button">Help</button>
+          <button type="button" onClick={closeNav}>Dashboard</button>
+          <button type="button" onClick={() => handleNav(onHistoryClick)}>History</button>
+          <button type="button" onClick={() => handleNav(onAnalyticsClick)}>Analytics</button>
+          <button type="button" onClick={() => handleNav(onHelpClick)}>Help</button>
           {canRegister && (
-            <button type="button" onClick={onRegisterClick}>Registration</button>
+            <button type="button" onClick={() => handleNav(onRegisterClick)}>Registration</button>
           )}
         </div>
         <div className="sidebar-card">
@@ -352,6 +486,17 @@ function Dashboard({
 
       <main className="main">
         <section className="topbar reveal">
+          <button
+            type="button"
+            className="hamburger"
+            onClick={() => setIsNavOpen((prev) => !prev)}
+            aria-label="Toggle navigation"
+            aria-expanded={isNavOpen}
+          >
+            <span />
+            <span />
+            <span />
+          </button>
           <div>
             <h2 className="headline">Payments, designed for stellar speed.</h2>
             <p className="subtle">
@@ -516,48 +661,249 @@ function Dashboard({
           )}
         </section>
 
+      </main>
+      <MobileNav
+        active="dashboard"
+        onDashboardClick={closeNav}
+        onHistoryClick={() => handleNav(onHistoryClick)}
+        onAnalyticsClick={() => handleNav(onAnalyticsClick)}
+        onHelpClick={() => handleNav(onHelpClick)}
+        onRegisterClick={() => handleNav(onRegisterClick)}
+        canRegister={canRegister}
+      />
+    </div>
+  )
+}
+
+function HelpPage({
+  onDashboardClick,
+  onAnalyticsClick,
+  onHistoryClick,
+  onRegisterClick,
+  canRegister,
+}) {
+  const [isNavOpen, setIsNavOpen] = useNavState()
+  const closeNav = () => {
+    sessionStorage.setItem(NAV_STORAGE_KEY, 'false')
+    setIsNavOpen(false)
+  }
+  const handleNav = (action) => {
+    sessionStorage.setItem(NAV_STORAGE_KEY, 'false')
+    setIsNavOpen(false)
+    action()
+  }
+  return (
+    <div className={`dashboard ${isNavOpen ? 'nav-open' : ''}`}>
+      <button
+        type="button"
+        className={`sidebar-scrim ${isNavOpen ? 'is-open' : ''}`}
+        onClick={() => setIsNavOpen(false)}
+        aria-label="Close navigation"
+      />
+      <aside className={`sidebar ${isNavOpen ? 'is-open' : ''}`}>
+        <div className="brand">
+          <div className="brand-mark">S</div>
+          <h1>Stellar Pay</h1>
+        </div>
+        <div className="nav">
+          <button type="button" onClick={() => handleNav(onDashboardClick)}>Dashboard</button>
+          <button type="button" onClick={() => handleNav(onHistoryClick)}>History</button>
+          <button type="button" onClick={() => handleNav(onAnalyticsClick)}>Analytics</button>
+          <button type="button" aria-current="page" onClick={closeNav}>Help</button>
+          {canRegister && (
+            <button type="button" onClick={() => handleNav(onRegisterClick)}>Registration</button>
+          )}
+        </div>
+        <div className="sidebar-card">
+          <h3>Support hours</h3>
+          <p>Live help is active Mon-Fri, 09:00-18:00 UTC.</p>
+        </div>
+        <div className="sidebar-card">
+          <h3>Contact</h3>
+          <p>Need a real person? Open a ticket from your wallet settings.</p>
+        </div>
+      </aside>
+
+      <main className="main">
+        <section className="topbar reveal">
+          <button
+            type="button"
+            className="hamburger"
+            onClick={() => setIsNavOpen((prev) => !prev)}
+            aria-label="Toggle navigation"
+            aria-expanded={isNavOpen}
+          >
+            <span />
+            <span />
+            <span />
+          </button>
+          <div>
+            <h2 className="headline">Help center</h2>
+            <p className="subtle">Get answers fast, or reach the support team.</p>
+          </div>
+          <div className="topbar-actions">
+            <span className="chip">Updated May 5</span>
+            <span className="chip">Testnet</span>
+          </div>
+        </section>
+
+        <section className="card reveal">
+          <div className="card-header">
+            <h2>Quick answers</h2>
+            <span className="chip">Live docs</span>
+          </div>
+          <div className="help-panel">
+            <div>
+              <strong>Verify a name tag</strong> - Use the format name*domain, then confirm the
+              domain is trusted.
+            </div>
+            <div><strong>Fees</strong> - Routing fee is applied to treasury per transaction.</div>
+            <div><strong>Wallet tips</strong> - Keep Freighter unlocked to sign without delays.</div>
+          </div>
+        </section>
+
         <section className="grid columns-2">
           <div className="card reveal">
             <div className="card-header">
-              <h2>Recent transfers</h2>
-              <span className="chip">Last 24 hours</span>
+              <h2>Getting started</h2>
+              <span className="chip">3 steps</span>
             </div>
-            <table className="history-table">
-              <thead>
-                <tr>
-                  <th>Recipient</th>
-                  <th>Amount</th>
-                  <th>Status</th>
-                </tr>
-              </thead>
-              <tbody>
-                <tr>
-                  <td>orbit*stellar.org</td>
-                  <td>1,240 XLM</td>
-                  <td>Success</td>
-                </tr>
-                <tr>
-                  <td>neon*fundable</td>
-                  <td>420 XLM</td>
-                  <td>Pending</td>
-                </tr>
-                <tr>
-                  <td>flux*anchor</td>
-                  <td>3,880 XLM</td>
-                  <td>Success</td>
-                </tr>
-                <tr>
-                  <td>delta*bridge</td>
-                  <td>255 XLM</td>
-                  <td>Success</td>
-                </tr>
-              </tbody>
-            </table>
+            <div className="stack">
+              <div>1. Connect Freighter and confirm your public key.</div>
+              <div>2. Register a username to share with senders.</div>
+              <div>3. Use the send card to route payments instantly.</div>
+            </div>
           </div>
           <div className="card reveal">
             <div className="card-header">
-              <h2>Analytics</h2>
-              <span className="chip">Routing insights</span>
+              <h2>Support channels</h2>
+              <span className="chip">Always on</span>
+            </div>
+            <div className="stack">
+              <div>Search the docs or open a ticket from your account.</div>
+              <div>Join the Stellar community for peer support.</div>
+              <div>Report incidents through the security intake form.</div>
+            </div>
+          </div>
+        </section>
+      </main>
+      <MobileNav
+        active="help"
+        onDashboardClick={() => handleNav(onDashboardClick)}
+        onHistoryClick={() => handleNav(onHistoryClick)}
+        onAnalyticsClick={() => handleNav(onAnalyticsClick)}
+        onHelpClick={closeNav}
+        onRegisterClick={() => handleNav(onRegisterClick)}
+        canRegister={canRegister}
+      />
+    </div>
+  )
+}
+
+function AnalyticsPage({
+  onDashboardClick,
+  onHistoryClick,
+  onHelpClick,
+  onRegisterClick,
+  canRegister,
+}) {
+  const [isNavOpen, setIsNavOpen] = useNavState()
+  const closeNav = () => {
+    sessionStorage.setItem(NAV_STORAGE_KEY, 'false')
+    setIsNavOpen(false)
+  }
+  const handleNav = (action) => {
+    sessionStorage.setItem(NAV_STORAGE_KEY, 'false')
+    setIsNavOpen(false)
+    action()
+  }
+  return (
+    <div className={`dashboard ${isNavOpen ? 'nav-open' : ''}`}>
+      <button
+        type="button"
+        className={`sidebar-scrim ${isNavOpen ? 'is-open' : ''}`}
+        onClick={() => setIsNavOpen(false)}
+        aria-label="Close navigation"
+      />
+      <aside className={`sidebar ${isNavOpen ? 'is-open' : ''}`}>
+        <div className="brand">
+          <div className="brand-mark">S</div>
+          <h1>Stellar Pay</h1>
+        </div>
+        <div className="nav">
+          <button type="button" onClick={() => handleNav(onDashboardClick)}>Dashboard</button>
+          <button type="button" onClick={() => handleNav(onHistoryClick)}>History</button>
+          <button type="button" aria-current="page" onClick={closeNav}>Analytics</button>
+          <button type="button" onClick={() => handleNav(onHelpClick)}>Help</button>
+          {canRegister && (
+            <button type="button" onClick={() => handleNav(onRegisterClick)}>Registration</button>
+          )}
+        </div>
+        <div className="sidebar-card">
+          <h3>Signal</h3>
+          <p>Routing data is refreshed every 15 minutes.</p>
+        </div>
+        <div className="sidebar-card">
+          <h3>Exports</h3>
+          <p>Download detailed reports from the analytics console.</p>
+        </div>
+      </aside>
+
+      <main className="main">
+        <section className="topbar reveal">
+          <button
+            type="button"
+            className="hamburger"
+            onClick={() => setIsNavOpen((prev) => !prev)}
+            aria-label="Toggle navigation"
+            aria-expanded={isNavOpen}
+          >
+            <span />
+            <span />
+            <span />
+          </button>
+          <div>
+            <h2 className="headline">Analytics</h2>
+            <p className="subtle">Monitor corridors, spikes, and routing health.</p>
+          </div>
+          <div className="topbar-actions">
+            <span className="chip">Last 24 hours</span>
+            <span className="chip">Testnet</span>
+          </div>
+        </section>
+
+        <section className="grid columns-3">
+          <div className="card reveal">
+            <div className="card-header">
+              <h2>Routing volume</h2>
+              <span className="badge">+12%</span>
+            </div>
+            <div className="metric">88,904 <span>XLM</span></div>
+            <div className="spark"></div>
+          </div>
+          <div className="card reveal">
+            <div className="card-header">
+              <h2>Avg confirmation</h2>
+              <span className="badge">Stable</span>
+            </div>
+            <div className="metric">3.9s <span>network</span></div>
+            <div className="spark"></div>
+          </div>
+          <div className="card reveal">
+            <div className="card-header">
+              <h2>Success rate</h2>
+              <span className="badge">99.1%</span>
+            </div>
+            <div className="metric">+0.4% <span>week</span></div>
+            <div className="spark"></div>
+          </div>
+        </section>
+
+        <section className="grid columns-2">
+          <div className="card reveal">
+            <div className="card-header">
+              <h2>Routing insights</h2>
+              <span className="chip">Corridors</span>
             </div>
             <div className="grid">
               <div>
@@ -575,24 +921,226 @@ function Dashboard({
               <div className="spark"></div>
             </div>
           </div>
+          <div className="card reveal">
+            <div className="card-header">
+              <h2>Alerts</h2>
+              <span className="chip">Live</span>
+            </div>
+            <div className="stack">
+              <div>Fee volatility is within normal range.</div>
+              <div>No stalled transactions in the last hour.</div>
+              <div>Anchor liquidity remains steady across corridors.</div>
+            </div>
+          </div>
+        </section>
+      </main>
+      <MobileNav
+        active="analytics"
+        onDashboardClick={() => handleNav(onDashboardClick)}
+        onHistoryClick={() => handleNav(onHistoryClick)}
+        onAnalyticsClick={closeNav}
+        onHelpClick={() => handleNav(onHelpClick)}
+        onRegisterClick={() => handleNav(onRegisterClick)}
+        canRegister={canRegister}
+      />
+    </div>
+  )
+}
+
+function HistoryPage({
+  onDashboardClick,
+  onAnalyticsClick,
+  onHelpClick,
+  onRegisterClick,
+  canRegister,
+}) {
+  const [isNavOpen, setIsNavOpen] = useNavState()
+  const closeNav = () => {
+    sessionStorage.setItem(NAV_STORAGE_KEY, 'false')
+    setIsNavOpen(false)
+  }
+  const handleNav = (action) => {
+    sessionStorage.setItem(NAV_STORAGE_KEY, 'false')
+    setIsNavOpen(false)
+    action()
+  }
+  return (
+    <div className={`dashboard ${isNavOpen ? 'nav-open' : ''}`}>
+      <button
+        type="button"
+        className={`sidebar-scrim ${isNavOpen ? 'is-open' : ''}`}
+        onClick={() => setIsNavOpen(false)}
+        aria-label="Close navigation"
+      />
+      <aside className={`sidebar ${isNavOpen ? 'is-open' : ''}`}>
+        <div className="brand">
+          <div className="brand-mark">S</div>
+          <h1>Stellar Pay</h1>
+        </div>
+        <div className="nav">
+          <button type="button" onClick={() => handleNav(onDashboardClick)}>Dashboard</button>
+          <button type="button" aria-current="page" onClick={closeNav}>History</button>
+          <button type="button" onClick={() => handleNav(onAnalyticsClick)}>Analytics</button>
+          <button type="button" onClick={() => handleNav(onHelpClick)}>Help</button>
+          {canRegister && (
+            <button type="button" onClick={() => handleNav(onRegisterClick)}>Registration</button>
+          )}
+        </div>
+        <div className="sidebar-card">
+          <h3>Timeline</h3>
+          <p>Payments are archived for 90 days.</p>
+        </div>
+        <div className="sidebar-card">
+          <h3>Filters</h3>
+          <p>Sort by status, amount, or corridor.</p>
+        </div>
+      </aside>
+
+      <main className="main">
+        <section className="topbar reveal">
+          <button
+            type="button"
+            className="hamburger"
+            onClick={() => setIsNavOpen((prev) => !prev)}
+            aria-label="Toggle navigation"
+            aria-expanded={isNavOpen}
+          >
+            <span />
+            <span />
+            <span />
+          </button>
+          <div>
+            <h2 className="headline">Transfer history</h2>
+            <p className="subtle">Track routing outcomes and audit every send.</p>
+          </div>
+          <div className="topbar-actions">
+            <span className="chip">Last 24 hours</span>
+            <span className="chip">Testnet</span>
+          </div>
         </section>
 
         <section className="card reveal">
           <div className="card-header">
-            <h2>Help center</h2>
-            <span className="chip">Live docs</span>
+            <h2>Recent transfers</h2>
+            <span className="chip">Latest</span>
           </div>
-          <div className="help-panel">
-            <div>
-              <strong>Verify a name tag</strong> - Use the format name*domain, then confirm the
-              domain is trusted.
-            </div>
-            <div><strong>Fees</strong> - Routing fee is applied to treasury per transaction.</div>
-            <div><strong>Wallet tips</strong> - Keep Freighter unlocked to sign without delays.</div>
-          </div>
+          <table className="history-table">
+            <thead>
+              <tr>
+                <th>Recipient</th>
+                <th>Amount</th>
+                <th>Status</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>orbit*stellar.org</td>
+                <td>1,240 XLM</td>
+                <td>Success</td>
+              </tr>
+              <tr>
+                <td>neon*fundable</td>
+                <td>420 XLM</td>
+                <td>Pending</td>
+              </tr>
+              <tr>
+                <td>flux*anchor</td>
+                <td>3,880 XLM</td>
+                <td>Success</td>
+              </tr>
+              <tr>
+                <td>delta*bridge</td>
+                <td>255 XLM</td>
+                <td>Success</td>
+              </tr>
+            </tbody>
+          </table>
         </section>
       </main>
+      <MobileNav
+        active="history"
+        onDashboardClick={() => handleNav(onDashboardClick)}
+        onHistoryClick={closeNav}
+        onAnalyticsClick={() => handleNav(onAnalyticsClick)}
+        onHelpClick={() => handleNav(onHelpClick)}
+        onRegisterClick={() => handleNav(onRegisterClick)}
+        canRegister={canRegister}
+      />
     </div>
+  )
+}
+
+function MobileNav({
+  active,
+  onDashboardClick,
+  onHistoryClick,
+  onAnalyticsClick,
+  onHelpClick,
+  onRegisterClick,
+  canRegister,
+}) {
+  return (
+    <nav className="mobile-nav" aria-label="Primary">
+      <button
+        type="button"
+        className={active === 'dashboard' ? 'is-active' : ''}
+        onClick={onDashboardClick}
+        aria-current={active === 'dashboard' ? 'page' : undefined}
+      >
+        <svg viewBox="0 0 24 24" aria-hidden="true">
+          <path d="M3 10.5 12 3l9 7.5V20a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1v-9.5Z" />
+        </svg>
+        <span>Dashboard</span>
+      </button>
+      <button
+        type="button"
+        className={active === 'history' ? 'is-active' : ''}
+        onClick={onHistoryClick}
+        aria-current={active === 'history' ? 'page' : undefined}
+      >
+        <svg viewBox="0 0 24 24" aria-hidden="true">
+          <path d="M4 5h16M6 12h12M9 19h6" />
+        </svg>
+        <span>History</span>
+      </button>
+      <button
+        type="button"
+        className={active === 'analytics' ? 'is-active' : ''}
+        onClick={onAnalyticsClick}
+        aria-current={active === 'analytics' ? 'page' : undefined}
+      >
+        <svg viewBox="0 0 24 24" aria-hidden="true">
+          <path d="M4 19V5m5 14V9m5 10v-6m5 6V7" />
+        </svg>
+        <span>Analytics</span>
+      </button>
+      <button
+        type="button"
+        className={active === 'help' ? 'is-active' : ''}
+        onClick={onHelpClick}
+        aria-current={active === 'help' ? 'page' : undefined}
+      >
+        <svg viewBox="0 0 24 24" aria-hidden="true">
+          <path d="M12 18h.01M9.5 9.5a2.5 2.5 0 1 1 4.2 1.9c-.78.7-1.2 1.2-1.2 2.1" />
+          <path d="M12 3a9 9 0 1 0 9 9" />
+        </svg>
+        <span>Help</span>
+      </button>
+      {canRegister && (
+        <button
+          type="button"
+          className={active === 'register' ? 'is-active' : ''}
+          onClick={onRegisterClick}
+          aria-current={active === 'register' ? 'page' : undefined}
+        >
+          <svg viewBox="0 0 24 24" aria-hidden="true">
+            <path d="M12 12a4 4 0 1 0-4-4 4 4 0 0 0 4 4Z" />
+            <path d="M5 21a7 7 0 0 1 14 0" />
+          </svg>
+          <span>Register</span>
+        </button>
+      )}
+    </nav>
   )
 }
 
