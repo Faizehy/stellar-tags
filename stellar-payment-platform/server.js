@@ -138,6 +138,10 @@ app.get('/health', (_req, res) => {
   res.json({ status: 'ok' });
 });
 
-app.listen(PORT, "0.0.0.0", () => {
-    console.log(`Server running on port ${PORT}`);
+const PORT = process.env.PORT || 8080;
+
+// Ensure this listener is at the absolute bottom of the file
+// and not duplicated inside any database connection blocks
+app.listen(PORT, '0.0.0.0', () => {
+    console.log(`Server successfully initialized on port ${PORT}`);
 });
