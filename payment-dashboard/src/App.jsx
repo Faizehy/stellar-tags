@@ -451,25 +451,24 @@ function Dashboard({
     }
 
     setIsProcessing(true)
-    displayMessage('Verifying recipient...', '#1F2937', '#F3F4F6')
 
     try {
+      // --- PHASE 1: RECIPIENT RESOLUTION ---
+      displayMessage('Verifying recipient...', '#1F2937', '#F3F4F6')
       const resolved = await resolveRecipient(recipientInput)
-      if (resolved.error) throw new Error(resolved.error)
+      if (resolved.error) throw new Error(`Resolution error: ${resolved.error}`)
       
       let recipientAddress = resolved.address
       if (!recipientAddress && resolved.tag) {
         const response = await fetch(`${API_BASE}/federation?q=${encodeURIComponent(resolved.tag)}&type=name`)
         const data = response.ok ? await response.json() : null
-        if (!data?.account_id) throw new Error('Recipient address could not be resolved.')
+        if (!data?.account_id) throw new Error('Recipient address could not be resolved from backend.')
         recipientAddress = data.account_id
       }
 
+      // --- PHASE 2: TRANSACTION ASSEMBLY ---
       displayMessage('Simulating smart contract execution...', '#1F2937', '#F3F4F6')
-
       const StellarSdk = await loadStellarSdk()
-      
-      // Strict BigInt conversion for Soroban i128 parameters
       const amountStroops = BigInt(Math.floor(amountValue * 10000000))
       
       const contractArgs = [
@@ -492,54 +491,66 @@ function Dashboard({
         .setTimeout(300)
         .build()
 
-      // The 'latest' SDK will now parse this simulation perfectly!
-      const preparedTransaction = await server.prepareTransaction(transaction)
-      if (preparedTransaction.error) {
-        throw new Error('Contract simulation failed. Check wallet funds.')
+      // --- PHASE 3: RPC SIMULATION ---
+      let preparedTransaction;
+      try {
+         preparedTransaction = await server.prepareTransaction(transaction)
+         if (preparedTransaction.error) {
+           throw new Error(preparedTransaction.error.message || 'Simulation rejected by network.')
+         }
+      } catch (err) {
+         throw new Error(`Simulation failed: ${err.message}`)
       }
 
+      // --- PHASE 4: WALLET SIGNATURE ---
       displayMessage('Please approve the transaction in your wallet.', '#0052FF', '#EFF6FF')
-      
-      const signedXdrResponse = await freighterApi.signTransaction(preparedTransaction.toXDR(), {
-        network: 'TESTNET',
-        networkPassphrase: 'Test SDF Network ; September 2015',
-      })
-
-      if (signedXdrResponse.error) throw new Error('Transaction canceled by user.')
-
-      displayMessage('Submitting to Stellar Testnet...', '#D97706', '#FEF3C7')
-
-      // Extract the raw string regardless of what Freighter returns
-      const finalXdr = typeof signedXdrResponse === 'string' 
-        ? signedXdrResponse 
-        : signedXdrResponse.signedTxXdr || signedXdrResponse
-
-      // Submit directly via RPC to bypass any client-side XDR parsing bugs
-      const rpcResponse = await fetch('https://soroban-testnet.stellar.org', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          jsonrpc: '2.0',
-          id: 1,
-          method: 'sendTransaction',
-          params: { transaction: finalXdr }
+      let signedXdrResponse;
+      try {
+        signedXdrResponse = await freighterApi.signTransaction(preparedTransaction.toXDR(), {
+          network: 'TESTNET',
+          networkPassphrase: 'Test SDF Network ; September 2015',
         })
-      })
-
-      const rpcData = await rpcResponse.json()
-      if (rpcData.error) throw new Error(`RPC Error: ${rpcData.error.message}`)
-
-      const status = rpcData.result?.status
-      if (status === 'PENDING' || status === 'SUCCESS') {
-        displayMessage('Payment successful!', '#059669', '#D1FAE5')
-        setAmount('')
-        onRefreshBalance()
-        window.dispatchEvent(new Event('stellar:tx-update'))
-      } else {
-        throw new Error(`Blockchain rejected transaction: ${status || 'Unknown'}`)
+        if (signedXdrResponse.error) throw new Error(signedXdrResponse.error)
+      } catch (err) {
+        throw new Error(`Wallet signature failed: ${err.message}`)
       }
+
+      // --- PHASE 5: BLOCKCHAIN SUBMISSION ---
+      displayMessage('Submitting to Stellar Testnet...', '#D97706', '#FEF3C7')
+      try {
+        const finalXdr = typeof signedXdrResponse === 'string' 
+          ? signedXdrResponse 
+          : signedXdrResponse.signedTxXdr || signedXdrResponse
+
+        const rpcResponse = await fetch('https://soroban-testnet.stellar.org', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            jsonrpc: '2.0',
+            id: 1,
+            method: 'sendTransaction',
+            params: { transaction: finalXdr }
+          })
+        })
+
+        const rpcData = await rpcResponse.json()
+        if (rpcData.error) throw new Error(`RPC Error: ${rpcData.error.message}`)
+
+        const status = rpcData.result?.status
+        if (status === 'PENDING' || status === 'SUCCESS') {
+          displayMessage('Payment successful!', '#059669', '#D1FAE5')
+          setAmount('')
+          onRefreshBalance()
+          window.dispatchEvent(new Event('stellar:tx-update'))
+        } else {
+          throw new Error(`Blockchain rejected transaction: ${status || 'Unknown'}`)
+        }
+      } catch (err) {
+        throw new Error(`Submission failed: ${err.message}`)
+      }
+
     } catch (error) {
-      displayMessage(error.message || 'A network error occurred.', '#DC2626', '#FEE2E2')
+      displayMessage(error.message || 'A critical error occurred.', '#DC2626', '#FEE2E2')
     } finally {
       setIsProcessing(false)
     }
