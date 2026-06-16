@@ -486,21 +486,20 @@ function Dashboard({
       const StellarSdk = await loadStellarSdk()
       
       // FIX 1: Wrap math in BigInt and convert to string for bulletproof i128 encoding
-      const amountInStroops = BigInt(Math.floor(amountValue * 10000000)).toString()
+      const amountStroops = BigInt(Math.floor(amountValue * 10000000));
 
+      // 2. Use strict .toScVal() constructors to completely eliminate guessing errors
       const contractArgs = [
-        StellarSdk.nativeToScVal(userPublicKey, { type: 'address' }),
-        StellarSdk.nativeToScVal(recipientAddress, { type: 'address' }),
-        StellarSdk.nativeToScVal(TREASURY_ADDRESS, { type: 'address' }),
-        StellarSdk.nativeToScVal(TOKEN_ADDRESS, { type: 'address' }),
-        StellarSdk.nativeToScVal(amountInStroops, { type: 'i128' }),
-      ]
+        new StellarSdk.Address(userPublicKey).toScVal(),
+        new StellarSdk.Address(recipientAddress).toScVal(),
+        new StellarSdk.Address(TREASURY_ADDRESS).toScVal(),
+        new StellarSdk.Address(TOKEN_ADDRESS).toScVal(),
+        StellarSdk.nativeToScVal(amountStroops, { type: 'i128' }),
+      ];
 
-      const server = new StellarSdk.rpc.Server('https://soroban-testnet.stellar.org')
-      const account = await server.getAccount(userPublicKey)
-
-      // FIX 2: Use modern Contract class instead of manual XDR trees
-      const contract = new StellarSdk.Contract(CONTRACT_ID)
+      const server = new StellarSdk.rpc.Server('https://soroban-testnet.stellar.org');
+      const account = await server.getAccount(userPublicKey);
+      const contract = new StellarSdk.Contract(CONTRACT_ID);
 
       const transaction = new StellarSdk.TransactionBuilder(account, {
         fee: '100000',
@@ -508,7 +507,7 @@ function Dashboard({
       })
         .addOperation(contract.call('route_payment', ...contractArgs))
         .setTimeout(300)
-        .build()
+        .build();
 
       const preparedTransaction = await server.prepareTransaction(transaction)
       if (preparedTransaction.error) {
