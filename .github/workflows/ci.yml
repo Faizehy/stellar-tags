@@ -1,0 +1,51 @@
+name: Production Safety Checks
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+
+jobs:
+  backend-checks:
+    name: Backend Build & Test
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+      
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          
+      - name: Install Backend Dependencies
+        run: npm ci
+        
+      # If you add Jest tests later, uncomment the line below
+      # - name: Run Backend Tests
+      #   run: npm test
+
+  frontend-checks:
+    name: Frontend Vercel Build Check
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ./payment-dashboard
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+      
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: ./payment-dashboard/package-lock.json
+          
+      - name: Install Frontend Dependencies
+        run: npm ci
+        
+      - name: Verify Vite Build (Catches Vercel Crashes)
+        run: npm run build
